@@ -8,7 +8,7 @@ Simple wrapper using `i3status` to generate `i3bar` input.
 
 ## Installation
 
-1. Download `i3status-wrapper`, make it executable (`chmod +x i3status-wrapper`) and move it to `~/.local/bin/` (`mv i3status-wrapper ~/.local/bin/`).
+1. Download `i3status-wrapper`, make it executable (`chmod +x i3status-wrapper`) and copy it to `~/.local/bin/` (`cp i3status-wrapper ~/.local/bin/`).
 2. Set output format of `i3status` to `"i3bar"` -- in section `general` in `~/.config/i3status/config` add `output_format = "i3bar"`. It should look as follows.
 
     ```config
