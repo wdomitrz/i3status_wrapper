@@ -48,15 +48,16 @@ def show_status_text():
     print(']', flush=True)
 
 
-def handle_click(name, **kwargs):
+def handle_click(line):
+    data = json.loads(line.strip(','))
+    name = data["name"]
     if name in BUTTONS:
-        BUTTONS[name](name=name, **kwargs)
+        BUTTONS[name](**data)
 
 
 def clicks_handler():
     for line in islice(sys.stdin, 1, None):
-        data = json.loads(line.strip(','))
-        Process(target=handle_click, kwargs=data).start()
+        Process(target=handle_click, args=[line]).start()
 
 
 def main():
