@@ -63,6 +63,7 @@ def handle_volume(button, **_):
 BUTTONS = {
     "terminal": run_command_on_click("x-terminal-emulator"),
     "menu": run_command_on_click(["gtk-launch", "run-menu"]),
+    "time": run_command_on_click(["xdg-open", "https://calendar.google.com/"]),
     "tztime": run_command_on_click(["xdg-open", "https://calendar.google.com/"]),
     "ipv6": run_command_on_click("nm-connection-editor"),
     "wireless": run_command_on_click("nm-connection-editor"),
