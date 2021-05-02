@@ -28,15 +28,15 @@ BLOCKS = [
 ]
 
 
+def process_blocks(old_blocks):
+    return old_blocks + BLOCKS
+
+
 def run_command(cmd, block=False):
     if not block:
         Popen(cmd, stdout=PIPE, stderr=PIPE)
     else:
         run(cmd, stdout=PIPE, stderr=PIPE)
-
-
-def process_blocks(old_blocks):
-    return old_blocks + BLOCKS
 
 
 def run_command_on_click(cmd, accepted_button=1):
