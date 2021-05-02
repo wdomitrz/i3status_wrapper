@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
+# vim:foldmethod=marker
+
 import json
 from multiprocessing import Process
 from subprocess import PIPE, Popen
 
-HEADER = {"version": 1, "click_events": True}
-
+# Config {{{
 BLOCKS = [
     {
         "name": "terminal",
@@ -17,14 +18,18 @@ BLOCKS = [
 ]
 
 
+def process_blocks(old_blocks):
+    return old_blocks + BLOCKS
+
+
 BUTTONS = {
     "terminal": lambda **_: Popen(["x-terminal-emulator"], stdout=PIPE, stderr=PIPE),
     "menu": lambda **_: Popen(["gtk-launch", "run-menu"], stdout=PIPE, stderr=PIPE),
 }
+# }}}
 
-
-def process_blocks(old_blocks):
-    return old_blocks + BLOCKS
+# Execution {{{
+HEADER = {"version": 1, "click_events": True}
 
 
 def show_status_text():
@@ -44,9 +49,9 @@ def show_status_text():
               json.dumps(data, separators=(',', ':')), flush=True)
 
 
-def handle_click(data):
-    if data["name"] in BUTTONS:
-        BUTTONS[data["name"]](**data)
+def handle_click(name, **kwargs):
+    if name in BUTTONS:
+        BUTTONS[name](name=name, **kwargs)
 
 
 def clicks_handler():
@@ -56,7 +61,7 @@ def clicks_handler():
     while True:
         line = input()
         data = json.loads(line.strip(','))
-        handle_click(data)
+        handle_click(**data)
 
 
 def main():
@@ -70,3 +75,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+# }}}
