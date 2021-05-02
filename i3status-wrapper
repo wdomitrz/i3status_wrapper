@@ -2,6 +2,8 @@
 # vim:foldmethod=marker
 
 import json
+import sys
+from itertools import islice
 from multiprocessing import Process
 from subprocess import PIPE, Popen
 
@@ -35,18 +37,15 @@ HEADER = {"version": 1, "click_events": True}
 def show_status_text():
     i3status = Popen('i3status', stdout=PIPE)
 
-    # Discard the first two lines
-    for _ in range(2):
-        i3status.stdout.readline()
-
     print(json.dumps(HEADER, separators=(',', ':')), flush=True)
     print('[', flush=True)
 
-    while True:
-        line = i3status.stdout.readline().decode()
+    # Discard the first two lines
+    for line in map(bytes.decode, islice(i3status.stdout, 2, None)):
         data = process_blocks(json.loads(line.strip(',')))
         print((',' if line[0] == ',' else '') +
               json.dumps(data, separators=(',', ':')), flush=True)
+    print(']', flush=True)
 
 
 def handle_click(name, **kwargs):
@@ -55,11 +54,7 @@ def handle_click(name, **kwargs):
 
 
 def clicks_handler():
-    # Ignore the first line
-    input()
-
-    while True:
-        line = input()
+    for line in islice(sys.stdin, 1, None):
         data = json.loads(line.strip(','))
         Process(target=handle_click, kwargs=data).start()
 
@@ -68,8 +63,6 @@ def main():
     process = Process(target=show_status_text)
     process.start()
     clicks_handler()
-    # This will never happen, but let's keep it (as we may change
-    # clicks_handler)
     process.join()
 
 
