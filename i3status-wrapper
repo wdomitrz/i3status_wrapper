@@ -15,34 +15,62 @@ from subprocess import PIPE, Popen, run
 
 REFRESH_STATUS_CMD = ["killall", "-SIGUSR1", "i3status"]
 
-# Config {{{
-BLOCKS = [
-    {
-        "name": "terminal",
-        "full_text": "📄"
-    },
-    {
-        "name": "menu",
-        "full_text": "🔍"
-    }
-]
-
-
-def process_blocks(old_blocks):
-    return old_blocks + BLOCKS
-
 
 def run_command(cmd, block=False):
     if not block:
-        Popen(cmd, stdout=PIPE, stderr=PIPE)
+        return Popen(cmd, stdout=PIPE, stderr=PIPE)
     else:
-        run(cmd, stdout=PIPE, stderr=PIPE)
+        return run(cmd, stdout=PIPE, stderr=PIPE)
 
 
-def run_command_on_click(cmd, accepted_button=1):
+# Config {{{
+BLOCKS = [{"name": "terminal", "full_text": "📄"},
+          {"name": "menu", "full_text": "🔍"}]
+
+
+class MEDIA_CONTROL_BLOCKS:
+    PAUSE = {"name": "pause", "full_text": "⏸️"}
+    PLAY = {"name": "play", "full_text": "▶️"}
+    PREVIOUS = {"name": "previous-track", "full_text": "⏮️"}
+    NEXT = {"name": "next-track", "full_text": "⏭️"}
+
+
+def media_blocks():
+    playerctl_title_process = run_command(
+        ["playerctl", "metadata", "title"], block=True)
+    playerctl_status_process = run_command(["playerctl", "status"], block=True)
+    if playerctl_title_process.returncode != 0 or playerctl_status_process.returncode != 0:
+        return []
+
+    title = playerctl_title_process.stdout.decode().strip()
+    status = playerctl_status_process.stdout.decode().strip()
+
+    info_block = {
+        "name": "media_info",
+        "full_text": title,
+        "color": "#BBFFBB" if status == "Playing" else "#BBBBFF"
+    }
+
+    return [
+        info_block,
+        MEDIA_CONTROL_BLOCKS.PREVIOUS,
+        MEDIA_CONTROL_BLOCKS.PAUSE if status == "Playing" else MEDIA_CONTROL_BLOCKS.PLAY,
+        MEDIA_CONTROL_BLOCKS.NEXT]
+
+
+def process_blocks(old_blocks):
+    return media_blocks() + old_blocks + BLOCKS
+
+
+def run_command_on_click(cmd, accepted_button=1, refresh=False):
     def helper(button, **_):
-        if button == accepted_button:
-            run_command(cmd)
+        if button != accepted_button:
+            return
+        if not refresh:
+            run_command(cmd, block=False)
+        else:
+            run_command(cmd, block=True)
+            run_command(REFRESH_STATUS_CMD)
     return helper
 
 
@@ -72,7 +100,11 @@ BUTTONS = {
     "cpu_temperature": run_command_on_click("xfce4-taskmanager"),
     "volume": handle_volume,
     "battery": run_command_on_click("xfce4-power-manager-settings"),
-    "disk_info": run_command_on_click("nautilus")
+    "disk_info": run_command_on_click("nautilus"),
+    "pause": run_command_on_click(["playerctl", "pause"], refresh=True),
+    "play": run_command_on_click(["playerctl", "play"], refresh=True),
+    "next-track": run_command_on_click(["playerctl", "next"], refresh=True),
+    "previous-track": run_command_on_click(["playerctl", "previous"], refresh=True)
 }
 # }}}
 
