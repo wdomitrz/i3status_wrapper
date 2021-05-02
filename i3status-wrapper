@@ -61,7 +61,7 @@ def clicks_handler():
     while True:
         line = input()
         data = json.loads(line.strip(','))
-        handle_click(**data)
+        Process(target=handle_click, kwargs=data).start()
 
 
 def main():
