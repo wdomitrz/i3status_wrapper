@@ -24,9 +24,22 @@ def process_blocks(old_blocks):
     return old_blocks + BLOCKS
 
 
+def run_command(cmd):
+    return lambda **_: Popen(cmd, stdout=PIPE, stderr=PIPE)
+
+
 BUTTONS = {
-    "terminal": lambda **_: Popen(["x-terminal-emulator"], stdout=PIPE, stderr=PIPE),
-    "menu": lambda **_: Popen(["gtk-launch", "run-menu"], stdout=PIPE, stderr=PIPE),
+    "terminal": run_command("x-terminal-emulator"),
+    "menu": run_command(["gtk-launch", "run-menu"]),
+    "tztime": run_command(["xdg-open", "https://calendar.google.com/"]),
+    "ipv6": run_command("nm-connection-editor"),
+    "wireless": run_command("nm-connection-editor"),
+    "ethernet": run_command("nm-connection-editor"),
+    "load": run_command("xfce4-taskmanager"),
+    "cpu_temperature": run_command("xfce4-taskmanager"),
+    "volume": run_command("pavucontrol"),
+    "battery": run_command("xfce4-power-manager-settings"),
+    "disk_info": run_command("nautilus")
 }
 # }}}
 
