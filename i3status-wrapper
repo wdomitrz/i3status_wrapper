@@ -11,7 +11,9 @@ import json
 import sys
 from itertools import islice
 from multiprocessing import Process
-from subprocess import PIPE, Popen
+from subprocess import PIPE, Popen, run
+
+REFRESH_STATUS_CMD = ["killall", "-SIGUSR1", "i3status"]
 
 # Config {{{
 BLOCKS = [
@@ -26,26 +28,50 @@ BLOCKS = [
 ]
 
 
+def run_command(cmd, block=False):
+    if not block:
+        Popen(cmd, stdout=PIPE, stderr=PIPE)
+    else:
+        run(cmd, stdout=PIPE, stderr=PIPE)
+
+
 def process_blocks(old_blocks):
     return old_blocks + BLOCKS
 
 
-def run_command(cmd):
-    return lambda **_: Popen(cmd, stdout=PIPE, stderr=PIPE)
+def run_command_on_click(cmd, accepted_button=1):
+    def helper(button, **_):
+        if button == accepted_button:
+            run_command(cmd)
+    return helper
+
+
+def handle_volume(button, **_):
+    if button == 3:
+        run_command("pavucontrol")
+        return
+    elif button in [1, 2]:
+        cmd = ["pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle"]
+    elif button in [4, 7]:
+        cmd = ["pactl", "set-sink-volume", "@DEFAULT_SINK@", "+1%"]
+    elif button in [5, 6]:
+        cmd = ["pactl", "set-sink-volume", "@DEFAULT_SINK@", "-1%"]
+    run_command(cmd, block=True)
+    run_command(REFRESH_STATUS_CMD)
 
 
 BUTTONS = {
-    "terminal": run_command("x-terminal-emulator"),
-    "menu": run_command(["gtk-launch", "run-menu"]),
-    "tztime": run_command(["xdg-open", "https://calendar.google.com/"]),
-    "ipv6": run_command("nm-connection-editor"),
-    "wireless": run_command("nm-connection-editor"),
-    "ethernet": run_command("nm-connection-editor"),
-    "load": run_command("xfce4-taskmanager"),
-    "cpu_temperature": run_command("xfce4-taskmanager"),
-    "volume": run_command("pavucontrol"),
-    "battery": run_command("xfce4-power-manager-settings"),
-    "disk_info": run_command("nautilus")
+    "terminal": run_command_on_click("x-terminal-emulator"),
+    "menu": run_command_on_click(["gtk-launch", "run-menu"]),
+    "tztime": run_command_on_click(["xdg-open", "https://calendar.google.com/"]),
+    "ipv6": run_command_on_click("nm-connection-editor"),
+    "wireless": run_command_on_click("nm-connection-editor"),
+    "ethernet": run_command_on_click("nm-connection-editor"),
+    "load": run_command_on_click("xfce4-taskmanager"),
+    "cpu_temperature": run_command_on_click("xfce4-taskmanager"),
+    "volume": handle_volume,
+    "battery": run_command_on_click("xfce4-power-manager-settings"),
+    "disk_info": run_command_on_click("nautilus")
 }
 # }}}
 
