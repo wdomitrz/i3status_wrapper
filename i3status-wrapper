@@ -44,18 +44,15 @@ def media_blocks():
 
     title = playerctl_title_process.stdout.decode().strip()
     status = playerctl_status_process.stdout.decode().strip()
+    control_icon = "⏸️" if status == "Playing" else "▶️"
 
     info_block = {
         "name": "media_info",
-        "full_text": title,
+        "full_text": f"{title} {control_icon}",
         "color": "#BBFFBB" if status == "Playing" else "#BBBBFF"
     }
 
-    return [
-        info_block,
-        MEDIA_CONTROL_BLOCKS.PREVIOUS,
-        MEDIA_CONTROL_BLOCKS.PAUSE if status == "Playing" else MEDIA_CONTROL_BLOCKS.PLAY,
-        MEDIA_CONTROL_BLOCKS.NEXT]
+    return [info_block]
 
 
 def process_blocks(old_blocks):
@@ -103,6 +100,7 @@ BUTTONS = {
     "disk_info": run_command_on_click("nautilus"),
     "pause": run_command_on_click(["playerctl", "pause"], refresh=True),
     "play": run_command_on_click(["playerctl", "play"], refresh=True),
+    "media_info": run_command_on_click(["playerctl", "play-pause"], refresh=True),
     "next-track": run_command_on_click(["playerctl", "next"], refresh=True),
     "previous-track": run_command_on_click(["playerctl", "previous"], refresh=True)
 }
