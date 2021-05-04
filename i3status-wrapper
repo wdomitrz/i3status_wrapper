@@ -37,9 +37,14 @@ class MEDIA_CONTROL_BLOCKS:
 
 
 def media_blocks():
-    playerctl_title_process = run_command(
-        ["playerctl", "metadata", "title"], block=True)
-    playerctl_status_process = run_command(["playerctl", "status"], block=True)
+    try:
+        playerctl_title_process = run_command(
+            ["playerctl", "metadata", "title"], block=True)
+        playerctl_status_process = run_command(
+            ["playerctl", "status"], block=True)
+    except FileNotFoundError:
+        return []
+
     if playerctl_title_process.returncode != 0 or playerctl_status_process.returncode != 0:
         return []
 
