@@ -61,8 +61,29 @@ def media_blocks():
     return [info_block]
 
 
+def add_no_internet_info(old_blocks):
+
+    def is_internet_block(block):
+        return block['name'] in ["ipv6", "wireless", "ethernet"]
+
+    internet_blocks = list(filter(is_internet_block, old_blocks))
+
+    if len(internet_blocks) == 0:
+        return old_blocks
+
+    if any(map(lambda x: len(x['full_text']) > 0, internet_blocks)):
+        return old_blocks
+
+    for i in range(len(old_blocks)):
+        if is_internet_block(old_blocks[i]):
+            old_blocks[i]['full_text'] = "⛔"
+            break
+
+    return old_blocks
+
+
 def process_blocks(old_blocks):
-    return media_blocks() + old_blocks + BLOCKS
+    return media_blocks() + add_no_internet_info(old_blocks) + BLOCKS
 
 
 def run_command_on_click(cmd, accepted_button=1, refresh=False):
