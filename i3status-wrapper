@@ -24,9 +24,13 @@ def run_command(cmd, block=False):
 
 
 # Config {{{
-BLOCKS = [{"name": "terminal", "full_text": "📄"},
-          {"name": "menu", "full_text": "🔍"},
-          {"name": "close", "full_text": "❌"}]
+
+BLOCKS = [
+    {"name": "editor", "full_text": "✍️"},
+    {"name": "terminal", "full_text": "📄"},
+    {"name": "menu", "full_text": "🔍"},
+    {"name": "close", "full_text": "❌"}
+]
 
 
 class MEDIA_CONTROL_BLOCKS:
@@ -130,7 +134,8 @@ BUTTONS = {
     "media_info": run_command_on_click(["playerctl", "play-pause"], refresh=True),
     "next-track": run_command_on_click(["playerctl", "next"], refresh=True),
     "previous-track": run_command_on_click(["playerctl", "previous"], refresh=True),
-    "close": run_command_on_click(["i3-msg", "kill"])
+    "editor": run_command_on_click(["gtk-launch", "code"]),
+    "close": run_command_on_click(["i3-msg", "kill"]),
 }
 # }}}
 
