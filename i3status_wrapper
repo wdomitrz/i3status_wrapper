@@ -1,35 +1,36 @@
 #!/usr/bin/env python3
-# vim:foldmethod=marker
-
 ################################################################
 # Copyright (c) 2021 Witalis Domitrz <witekdomitrz@gmail.com>
-# MIT License
+# AGPL License
 ################################################################
 
 
+import contextlib
+import itertools
 import json
+import multiprocessing
+import select
+import subprocess
 import sys
-from itertools import islice
-from multiprocessing import Process
-from subprocess import PIPE, Popen, run
 
 REFRESH_STATUS_CMD = ["killall", "-SIGUSR1", "i3status"]
 
 
 def run_command(cmd, block=False):
     if not block:
-        return Popen(cmd, stdout=PIPE, stderr=PIPE)
-    else:
-        return run(cmd, stdout=PIPE, stderr=PIPE)
+        return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    return subprocess.run(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False
+    )
 
 
-# Config {{{
+# Config
 
 BLOCKS = [
     {"name": "editor", "full_text": "✍️"},
     {"name": "terminal", "full_text": "📄"},
     {"name": "menu", "full_text": "🔍"},
-    {"name": "close", "full_text": "❌"}
+    {"name": "close", "full_text": "❌"},
 ]
 
 
@@ -43,13 +44,16 @@ class MEDIA_CONTROL_BLOCKS:
 def media_blocks():
     try:
         playerctl_title_process = run_command(
-            ["playerctl", "metadata", "title"], block=True)
-        playerctl_status_process = run_command(
-            ["playerctl", "status"], block=True)
+            ["playerctl", "metadata", "title"], block=True
+        )
+        playerctl_status_process = run_command(["playerctl", "status"], block=True)
     except FileNotFoundError:
         return []
 
-    if playerctl_title_process.returncode != 0 or playerctl_status_process.returncode != 0:
+    if (
+        playerctl_title_process.returncode != 0
+        or playerctl_status_process.returncode != 0
+    ):
         return []
 
     title = playerctl_title_process.stdout.decode().strip()
@@ -59,28 +63,27 @@ def media_blocks():
     info_block = {
         "name": "media_info",
         "full_text": f"{title} {control_icon}",
-        "color": "#BBFFBB" if status == "Playing" else "#BBBBFF"
+        "color": "#BBFFBB" if status == "Playing" else "#BBBBFF",
     }
 
     return [info_block]
 
 
 def add_no_internet_info(old_blocks):
-
     def is_internet_block(block):
-        return block['name'] in ["ipv6", "wireless", "ethernet"]
+        return "name" in block and block["name"] in ["ipv6", "wireless", "ethernet"]
 
     internet_blocks = list(filter(is_internet_block, old_blocks))
 
     if len(internet_blocks) == 0:
         return old_blocks
 
-    if any(map(lambda x: len(x['full_text']) > 0, internet_blocks)):
+    if any(map(lambda x: len(x["full_text"]) > 0, internet_blocks)):
         return old_blocks
 
-    for i in range(len(old_blocks)):
-        if is_internet_block(old_blocks[i]):
-            old_blocks[i]['full_text'] = "⛔"
+    for i, old_block in enumerate(old_blocks):
+        if is_internet_block(old_block):
+            old_blocks[i]["full_text"] = "⛔"
             break
 
     return old_blocks
@@ -99,6 +102,7 @@ def run_command_on_click(cmd, accepted_button=1, refresh=False):
         else:
             run_command(cmd, block=True)
             run_command(REFRESH_STATUS_CMD)
+
     return helper
 
 
@@ -106,19 +110,21 @@ def handle_volume(button, **_):
     if button == 3:
         run_command("pavucontrol")
         return
-    elif button in [1, 2]:
+    if button in [1, 2]:
         cmd = ["pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle"]
     elif button in [4, 7]:
         cmd = ["pactl", "set-sink-volume", "@DEFAULT_SINK@", "+1%"]
     elif button in [5, 6]:
         cmd = ["pactl", "set-sink-volume", "@DEFAULT_SINK@", "-1%"]
+    else:
+        raise RuntimeError(f"Unknown button: {button}")
     run_command(cmd, block=True)
     run_command(REFRESH_STATUS_CMD)
 
 
 BUTTONS = {
-    "terminal": run_command_on_click("x-terminal-emulator"),
-    "menu": run_command_on_click(["gtk-launch", "run-menu"]),
+    "terminal": run_command_on_click("i3-sensible-terminal"),
+    "menu": run_command_on_click(["gtk-launch", "run_menu"]),
     "time": run_command_on_click(["xdg-open", "https://calendar.google.com/"]),
     "tztime": run_command_on_click(["xdg-open", "https://calendar.google.com/"]),
     "ipv6": run_command_on_click("nm-connection-editor"),
@@ -137,45 +143,90 @@ BUTTONS = {
     "editor": run_command_on_click(["gtk-launch", "code"]),
     "close": run_command_on_click(["i3-msg", "kill"]),
 }
-# }}}
 
-# Execution {{{
+# Execution
 HEADER = {"version": 1, "click_events": True}
+I3STATUS_COMMANDS = [
+    "i3status",
+]
+
+
+def combine_read_sources(*read_sources):
+    while True:
+        ready_reads, _, _ = select.select(read_sources, [], [])
+        for ready_read in ready_reads:
+            yield ready_read.fileno(), ready_read.readline()
+
+
+def process_i3status_output(i3status_output):
+    i3status_output_str = bytes.decode(i3status_output).strip().strip(",")
+
+    try:
+        result = json.loads(i3status_output_str)
+    except json.decoder.JSONDecodeError:
+        return None
+
+    if not isinstance(result, list):
+        return None
+    return result
+
+
+def combine_i3status_outputs(*i3status_outputs):
+    fileno_order = [output.fileno() for output in i3status_outputs]
+
+    last_remembered_lists = {fileno: [] for fileno in fileno_order}
+    for fileno, output in combine_read_sources(*i3status_outputs):
+        result = process_i3status_output(output)
+        if result is None:
+            continue
+        last_remembered_lists[fileno] = result
+
+        yield sum([last_remembered_lists[fileno] for fileno in fileno_order], [])
 
 
 def show_status_text():
-    i3status = Popen('i3status', stdout=PIPE)
+    print(json.dumps(HEADER, separators=(",", ":")), flush=True)
+    print("[", flush=True)
 
-    print(json.dumps(HEADER, separators=(',', ':')), flush=True)
-    print('[', flush=True)
+    with contextlib.ExitStack() as stack:
+        i3status_processes = [
+            stack.enter_context(
+                subprocess.Popen(i3status_command, stdout=subprocess.PIPE)
+            )
+            for i3status_command in I3STATUS_COMMANDS
+        ]
 
-    # Discard the first two lines
-    for line in map(bytes.decode, islice(i3status.stdout, 2, None)):
-        data = process_blocks(json.loads(line.strip(',')))
-        print((',' if line[0] == ',' else '') +
-              json.dumps(data, separators=(',', ':')), flush=True)
-    print(']', flush=True)
+        for unprocessed_data in combine_i3status_outputs(
+            *(i3status_process.stdout for i3status_process in i3status_processes)
+        ):
+            data = process_blocks(unprocessed_data)
+            print(json.dumps(data, separators=(",", ":")) + ",", flush=True)
+
+    print("]", flush=True)
 
 
 def handle_click(line):
-    data = json.loads(line.strip(','))
+    data = json.loads(line.strip(","))
+
+    if "name" not in data:
+        return
     name = data["name"]
+
     if name in BUTTONS:
         BUTTONS[name](**data)
 
 
 def clicks_handler():
-    for line in islice(sys.stdin, 1, None):
-        Process(target=handle_click, args=[line]).start()
+    for line in itertools.islice(sys.stdin, 1, None):
+        multiprocessing.Process(target=handle_click, args=[line]).start()
 
 
 def main():
-    process = Process(target=show_status_text)
+    process = multiprocessing.Process(target=show_status_text)
     process.start()
     clicks_handler()
     process.join()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
-# }}}
