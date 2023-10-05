@@ -12,49 +12,10 @@ import multiprocessing
 import select
 import subprocess
 import sys
-from typing import Required, TypedDict
+from typing import Callable, Required, TypedDict
 
 
-class Block(TypedDict, total=False):
-    name: Required[str]
-    full_text: str
-    color: str
-
-
-ALL_BLOCKS = {
-    block["name"]: block
-    for block in []
-    # Button blocks
-    + [
-        Block(name="close", full_text="❌"),
-        Block(name="editor", full_text="✍️"),
-        Block(name="menu", full_text="🔍"),
-        Block(name="terminal", full_text="📄"),
-    ]
-    # Multimedia controls
-    + [
-        Block(name="next_track", full_text="⏭️"),
-        Block(name="pause", full_text="⏸️"),
-        Block(name="play_pause", full_text="⏯️"),
-        Block(name="play", full_text="▶️"),
-        Block(name="previous_track", full_text="⏮️"),
-        Block(name="stop", full_text="⏹️"),
-    ]
-}
-
-# Config
-BLOCKS_TO_ADD = [
-    ALL_BLOCKS[name]
-    for name in [
-        "close",
-        "editor",
-        "menu",
-        "terminal",
-    ]
-]
-
-
-# Defining blocks
+# Helper functions
 def run_command_background(cmd):
     return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
@@ -65,6 +26,143 @@ def run_command_blocking(cmd):
     )
 
 
+REFRESH_STATUS_CMD = "killall -SIGUSR1 i3status".split()
+
+
+# Click handling
+def run_command_on_click(cmd, accepted_button=1, refresh=False):
+    def helper(button, **_):
+        if button != accepted_button:
+            return
+        if not refresh:
+            run_command_background(cmd)
+        else:
+            run_command_blocking(cmd)
+            run_command_background(REFRESH_STATUS_CMD)
+
+    return helper
+
+
+def handle_volume(*, button, modifiers, **_):
+    if button == 3:
+        run_command_background("pavucontrol")
+        return
+    volume_mult = 1 if "Control" not in modifiers else 5
+    if button in [1, 2]:
+        cmd = "pactl set-sink-mute @DEFAULT_SINK@ toggle".split()
+    elif button in [4, 7]:
+        cmd = f"pactl set-sink-volume @DEFAULT_SINK@ +{volume_mult}%".split()
+    elif button in [5, 6]:
+        cmd = f"pactl set-sink-volume @DEFAULT_SINK@ -{volume_mult}%".split()
+    else:
+        raise RuntimeError(f"Unknown button: {button}")
+    run_command_blocking(cmd)
+    run_command_background(REFRESH_STATUS_CMD)
+
+
+# Blocks
+class Block(TypedDict, total=False):
+    name: Required[str]
+    full_text: str
+    color: str
+    on_click: Callable[..., None]
+
+
+ALL_BLOCKS = {
+    block["name"]: block
+    for block in []
+    # Button blocks
+    + [
+        Block(
+            name="close",
+            full_text="❌",
+            on_click=run_command_on_click("i3-msg kill".split()),
+        ),
+        Block(
+            name="editor",
+            full_text="✍️",
+            on_click=run_command_on_click("gtk-launch code".split()),
+        ),
+        Block(
+            name="menu",
+            full_text="🔍",
+            on_click=run_command_on_click("gtk-launch run_menu".split()),
+        ),
+        Block(
+            name="terminal",
+            full_text="📄",
+            on_click=run_command_on_click("i3-sensible-terminal"),
+        ),
+    ]
+    # Multimedia controls
+    + [
+        Block(
+            name="next_track",
+            full_text="⏭️",
+            on_click=run_command_on_click("playerctl next".split(), refresh=True),
+        ),
+        Block(
+            name="pause",
+            full_text="⏸️",
+            on_click=run_command_on_click("playerctl pause".split(), refresh=True),
+        ),
+        Block(
+            name="play_pause",
+            full_text="⏯️",
+            on_click=run_command_on_click("playerctl play-pause".split(), refresh=True),
+        ),
+        Block(
+            name="play",
+            full_text="▶️",
+            on_click=run_command_on_click("playerctl play".split(), refresh=True),
+        ),
+        Block(
+            name="previous_track",
+            full_text="⏮️",
+            on_click=run_command_on_click("playerctl previous".split(), refresh=True),
+        ),
+        Block(
+            name="stop",
+            full_text="⏹️",
+            on_click=run_command_on_click("playerctl stop".split(), refresh=True),
+        ),
+    ]
+    # Click events, without full_text
+    + [
+        Block(
+            name="battery",
+            on_click=run_command_on_click("xfce4-power-manager-settings"),
+        ),
+        Block(
+            name="cpu_temperature", on_click=run_command_on_click("xfce4-taskmanager")
+        ),
+        Block(name="disk_info", on_click=run_command_on_click("nautilus")),
+        Block(name="ethernet", on_click=run_command_on_click("nm-connection-editor")),
+        Block(name="ipv6", on_click=run_command_on_click("nm-connection-editor")),
+        Block(name="load", on_click=run_command_on_click("xfce4-taskmanager")),
+        Block(
+            name="time",
+            on_click=run_command_on_click(
+                "xdg-open https://calendar.google.com/".split()
+            ),
+        ),
+        Block(
+            name="tztime",
+            on_click=run_command_on_click(
+                "xdg-open https://calendar.google.com/".split()
+            ),
+        ),
+        Block(name="wireless", on_click=run_command_on_click("nm-connection-editor")),
+        Block(
+            name="media_info",
+            on_click=run_command_on_click("playerctl play-pause".split(), refresh=True),
+        ),
+        Block(name="volume", on_click=handle_volume),
+    ]
+}
+
+
+# Custom block groups
 def media_blocks():
     try:
         playerctl_title_process = run_command_blocking(
@@ -84,15 +182,13 @@ def media_blocks():
     status = playerctl_status_process.stdout.decode().strip()
     control_icon = "⏸️" if status == "Playing" else "▶️"
 
-    info_block = Block(
-        name="media_info",
-        full_text=f"{title} {control_icon}",
-        color="#BBFFBB" if status == "Playing" else "#BBBBFF",
-    )
-
     return [
         ALL_BLOCKS["previous_track"],
-        info_block,
+        Block(
+            **ALL_BLOCKS["media_info"],
+            full_text=f"{title} {control_icon}",
+            color="#BBFFBB" if status == "Playing" else "#BBBBFF",
+        ),
         ALL_BLOCKS["next_track"],
         ALL_BLOCKS["stop"],
     ]
@@ -118,81 +214,22 @@ def add_no_internet_info(old_blocks):
     return old_blocks
 
 
-# Click handling
+# Config
+BLOCKS_TO_ADD = [
+    "editor",
+    "terminal",
+    "menu",
+    "close",
+]
+
+
 def process_blocks(old_blocks):
-    return media_blocks() + add_no_internet_info(old_blocks) + BLOCKS_TO_ADD
+    return (
+        media_blocks()
+        + add_no_internet_info(old_blocks)
+        + [ALL_BLOCKS[name] for name in BLOCKS_TO_ADD]
+    )
 
-
-REFRESH_STATUS_CMD = "killall -SIGUSR1 i3status".split()
-
-
-def run_command_on_click(cmd, accepted_button=1, refresh=False):
-    def helper(button, **_):
-        if button != accepted_button:
-            return
-        if not refresh:
-            run_command_background(cmd)
-        else:
-            run_command_blocking(cmd)
-            run_command_background(REFRESH_STATUS_CMD)
-
-    return helper
-
-
-def handle_volume(button, **_):
-    if button == 3:
-        run_command_background("pavucontrol")
-        return
-    if button in [1, 2]:
-        cmd = "pactl set-sink-mute @DEFAULT_SINK@ toggle".split()
-    elif button in [4, 7]:
-        cmd = "pactl set-sink-volume @DEFAULT_SINK@ +1%".split()
-    elif button in [5, 6]:
-        cmd = "pactl set-sink-volume @DEFAULT_SINK@ -1%".split()
-    else:
-        raise RuntimeError(f"Unknown button: {button}")
-    run_command_blocking(cmd)
-    run_command_background(REFRESH_STATUS_CMD)
-
-
-BUTTONS = {
-    # Just run a command
-    **{
-        name: run_command_on_click(cmd)
-        for name, cmd in {
-            "battery": "xfce4-power-manager-settings",
-            "close": "i3-msg kill".split(),
-            "cpu_temperature": "xfce4-taskmanager",
-            "disk_info": "nautilus",
-            "editor": "gtk-launch code".split(),
-            "ethernet": "nm-connection-editor",
-            "ipv6": "nm-connection-editor",
-            "load": "xfce4-taskmanager",
-            "menu": "gtk-launch run_menu".split(),
-            "terminal": "i3-sensible-terminal",
-            "time": "xdg-open https://calendar.google.com/".split(),
-            "tztime": "xdg-open https://calendar.google.com/".split(),
-            "wireless": "nm-connection-editor",
-        }.items()
-    },
-    # Run a command and refresh i3bar
-    **{
-        name: run_command_on_click(cmd, refresh=True)
-        for name, cmd in {
-            "media_info": "playerctl play-pause".split(),
-            "next_track": "playerctl next".split(),
-            "pause": "playerctl pause".split(),
-            "play_pause": "playerctl play-pause".split(),
-            "play": "playerctl play".split(),
-            "previous_track": "playerctl previous".split(),
-            "stop": "playerctl stop".split(),
-        }.items()
-    },
-    # Use custom functions
-    **{
-        "volume": handle_volume,
-    },
-}
 
 # Execution
 HEADER = {"version": 1, "click_events": True}
@@ -250,7 +287,11 @@ def show_status_text():
             *(i3status_process.stdout for i3status_process in i3status_processes)
         ):
             data = process_blocks(unprocessed_data)
-            print(json.dumps(data, separators=(",", ":")) + ",", flush=True)
+            print(
+                json.dumps(data, separators=(",", ":"), default=lambda v: str(type(v)))
+                + ",",
+                flush=True,
+            )
 
     print("]", flush=True)
 
@@ -261,10 +302,9 @@ def handle_click(line):
 
     if "name" not in data:
         return
-    name = data["name"]
 
-    if name in BUTTONS:
-        BUTTONS[name](**data)
+    if (name := data["name"]) in ALL_BLOCKS and "on_click" in ALL_BLOCKS[name]:
+        ALL_BLOCKS[name]["on_click"](**data)
 
 
 def clicks_handler():
