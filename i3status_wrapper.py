@@ -33,7 +33,9 @@ import subprocess
 import sys
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import asdict, dataclass, replace
-from typing import Protocol, Self, TypeAlias
+from typing import Protocol, TypeAlias
+
+from typing_extensions import Self
 
 StatusBlock: TypeAlias = dict[str, object]
 
