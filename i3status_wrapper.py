@@ -18,13 +18,6 @@
 # pyright: reportUnusedParameter = false
 #
 # ruff: noqa: SIM905
-#
-# /// script
-# requires-python = ">=3.10"
-# dependencies = [
-#   "typing-extensions>=4.1; python_version < '3.11'",
-# ]
-# ///
 
 from __future__ import annotations
 
@@ -42,10 +35,7 @@ from collections.abc import Callable, Iterator, Sequence
 from dataclasses import asdict, dataclass, replace
 from typing import Protocol, TypeAlias
 
-if sys.version_info >= (3, 11):
-    from typing import Self
-else:
-    from typing_extensions import Self
+from typing_extensions import Self
 
 StatusBlock: TypeAlias = dict[str, object]
 
